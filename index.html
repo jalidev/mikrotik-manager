@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HotSpot Manager — MikroTik</title>
+<style>
+  :root{--bg:#0b0d10;--panel:#12151b;--panel2:#171b23;--line:#232936;--txt:#e8ecf3;--dim:#8b93a3;--lime:#c8f542;--red:#ff5d5d;--amber:#ffb84d;--blue:#5aa2ff;--radius:14px}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .logo{font-weight:800;font-size:20px;letter-spacing:-.5px}.logo span{color:var(--lime)}
+  .router{margin-inline-start:auto;display:flex;align-items:center;gap:8px;color:var(--dim);font-size:13px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--lime);box-shadow:0 0 8px rgba(200,245,66,.6)}
+  main{padding:22px;max-width:1150px;margin:0 auto}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .stat .k{color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:.7px}
+  .stat .v{font-size:26px;font-weight:800;margin-top:5px;font-variant-numeric:tabular-nums}
+  .v.lime{color:var(--lime)}.v.blue{color:var(--blue)}.v.amber{color:var(--amber)}
+  .bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .bar input{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--txt);font-size:14px;outline:none}
+  .bar input:focus{border-color:var(--lime)}
+  .gen{background:var(--lime);color:#0b0d10;border:none;padding:11px 20px;border-radius:10px;font-weight:800;cursor:pointer;font-size:13.5px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  th{color:var(--dim);text-align:left;padding:11px 13px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  td{padding:11px 13px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  .pill{padding:3px 11px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+  .active{background:rgba(200,245,66,.13);color:var(--lime)}
+  .paused{background:rgba(255,184,77,.13);color:var(--amber)}
+  .exhausted{background:rgba(255,107,107,.15);color:var(--red)}
+  .act-btn{background:transparent;border:1px solid var(--line);color:var(--dim);padding:6px 12px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600}
+  .act-btn:hover{color:var(--lime);border-color:var(--lime)}
+  .num{font-variant-numeric:tabular-nums}
+  .cards-zone{margin-top:26px;display:none}
+  .cards-zone.show{display:block}
+  .cards-zone h3{margin-bottom:12px;font-size:16px}
+  .vcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+  .vcard{background:linear-gradient(135deg,#1a1e28,#12151b);border:1px solid var(--line);border-radius:12px;padding:16px;position:relative}
+  .vcard .code{font-family:"Courier New",monospace;font-size:17px;font-weight:700;color:var(--lime);letter-spacing:1px}
+  .vcard .prof{color:var(--dim);font-size:11.5px;margin-top:6px}
+  .vcard .corner{position:absolute;top:12px;inset-inline-end:12px;color:var(--dim)}
+  @media(max-width:700px){table{font-size:12px}th,td{padding:8px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">HotSpot<span>Manager</span></div>
+  <div class="router"><span class="dot"></span>RB951G-2HnD · 192.168.88.1 · <b style="color:var(--txt)">online</b></div>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><div class="k">Active users</div><div class="v lime" id="s-active">0</div></div>
+    <div class="stat"><div class="k">Data today</div><div class="v blue" id="s-data">0 GB</div></div>
+    <div class="stat"><div class="k">Cards sold today</div><div class="v amber" id="s-cards">0</div></div>
+    <div class="stat"><div class="k">Revenue today</div><div class="v" id="s-rev">0 FCFA</div></div>
+  </div>
+
+  <div class="bar">
+    <input id="q" placeholder="Search user, card code or profile..." oninput="render()">
+    <button class="gen" onclick="genCards()">+ Generate 6 cards</button>
+  </div>
+
+  <table>
+    <thead><tr><th>User</th><th>Profile</th><th>Uptime</th><th>Data used</th><th>Status</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="cards-zone" id="cardsZone">
+    <h3>New voucher cards — ready to print</h3>
+    <div class="vcards" id="vcards"></div>
+  </div>
+</main>
+<script>
+const PROFILES={"1 Hour":100,"1 Day":300,"1 Week":1000,"1 Month":3000};
+let users=[
+ {u:"ali.m",p:"1 Day",up:"3:12:44",data:"412 MB",st:"active"},
+ {u:"fatou.d",p:"1 Week",up:"2d 04:31",data:"2.8 GB",st:"active"},
+ {u:"khalil77",p:"1 Hour",up:"0:41:02",data:"96 MB",st:"active"},
+ {u:"mariam.s",p:"1 Month",up:"6d 11:20",data:"14.2 GB",st:"active"},
+ {u:"ousman",p:"1 Day",up:"0:00:00",data:"0 MB",st:"paused"},
+ {u:"zara.b",p:"1 Hour",up:"1:00:00",data:"238 MB",st:"exhausted"},
+ {u:"ibrahim.t",p:"1 Week",up:"1d 09:15",data:"1.9 GB",st:"active"},
+ {u:"hawa.k",p:"1 Day",up:"0:52:37",data:"310 MB",st:"paused"},
+];
+let cardsSold=18;
+const $=id=>document.getElementById(id);
+function render(){
+ const q=$("q").value.toLowerCase();
+ const list=users.map((u,i)=>({u,i})).filter(({u})=>(u.u+u.p).toLowerCase().includes(q));
+ $("rows").innerHTML=list.map(({u,i})=>`<tr><td><b>${u.u}</b></td><td>${u.p}</td>
+  <td class="num">${u.up}</td><td class="num">${u.data}</td>
+  <td><span class="pill ${u.st}">${u.st==="active"?"Active":u.st==="paused"?"Paused":"Exhausted"}</span></td>
+  <td>${u.st!=="exhausted"?`<button class="act-btn" onclick="toggle(${i})">${u.st==="active"?"Pause":"Resume"}</button>`:""}</td></tr>`).join("")
+  ||'<tr><td colspan="6" style="color:var(--dim)">No users match</td></tr>';
+ $("s-active").textContent=users.filter(u=>u.st==="active").length;
+ $("s-cards").textContent=cardsSold;
+ $("s-data").textContent="21.4 GB";
+ $("s-rev").textContent=(cardsSold*300).toLocaleString()+" FCFA";
+}
+function toggle(i){users[i].st=users[i].st==="active"?"paused":"active";render()}
+function genCards(){
+ const profs=Object.keys(PROFILES);
+ const cards=Array.from({length:6},()=>{
+  const code=Array.from({length:8},()=>"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random()*32)]).join("");
+  const p=profs[Math.floor(Math.random()*profs.length)];
+  return{code,p,price:PROFILES[p]}});
+ $("cardsZone").classList.add("show");
+ $("vcards").innerHTML=cards.map(c=>`<div class="vcard">
+  <div class="corner"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8.5 15.5a5 5 0 1 1 7 0M12 18h.01M5.6 12.6a9 9 0 0 1 12.8 0"/></svg></div>
+  <div class="code">${c.code.slice(0,4)}-${c.code.slice(4)}</div>
+  <div class="prof">${c.p} · ${c.price.toLocaleString()} FCFA</div></div>`).join("");
+ cardsSold+=6;render();
+ $("cardsZone").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+render();
+</script>
+</body>
+</html>
